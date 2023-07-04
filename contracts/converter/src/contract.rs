@@ -1,6 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{CosmosMsg, to_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Event, WasmMsg, WasmQuery, QuerierWrapper, QueryRequest };
+use cosmwasm_std::{CosmosMsg, to_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, WasmMsg, WasmQuery, QuerierWrapper, QueryRequest };
 use osmosis_std::types::osmosis::tokenfactory::v1beta1::{ MsgCreateDenom, MsgMint, MsgBurn };
 use osmosis_std::types::cosmos::base::v1beta1::Coin;
 use osmosis_std::types::cosmos::bank::v1beta1::MsgSend;
@@ -97,6 +97,16 @@ fn conver_cw20_to_coin( deps: DepsMut, env: Env, info: MessageInfo, token: Strin
 
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: token.clone(),
+        msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+            spender: sender.clone(),
+            amount: amount_to_mint.clone(),
+            expires: None,
+        })?,
+        funds: vec![],
+    }));
+
+    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: token.clone(),
         msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
             owner: info.sender.to_string(),
             recipient: sender.clone(),
@@ -114,16 +124,17 @@ fn conver_cw20_to_coin( deps: DepsMut, env: Env, info: MessageInfo, token: Strin
         }],
     }.into();
 
-    let init_event =
-        Event::new("converter/conver_cw20_to_coin").add_attribute("subdenom", String::from(token_info.name.clone()));
     Ok(response
+        .add_attribute("action", "convert_cw20_to_coin")
+        .add_attribute("sender", &info.sender)
+        .add_attribute("subdenom", String::from(token_info.name.clone()))
+        .add_attribute("amount", String::from(amount_to_mint.clone()))
         .add_messages(messages)
         .add_message(msg_mint)
-        .add_message(send_msg)
-        .add_event(init_event))
+        .add_message(send_msg))
 }
 
-fn conver_coin_to_cw20( deps: DepsMut, env: Env, _info: MessageInfo, token: String, amount_to_burn: Uint128, recipient: String ) -> Result<Response, ContractError> {
+fn conver_coin_to_cw20( deps: DepsMut, env: Env, info: MessageInfo, token: String, amount_to_burn: Uint128, recipient: String ) -> Result<Response, ContractError> {
     let sender: String = env.contract.address.into();
     let mut messages = vec![];
 
@@ -169,11 +180,12 @@ fn conver_coin_to_cw20( deps: DepsMut, env: Env, _info: MessageInfo, token: Stri
         funds: vec![],
     }));
 
-    let init_event =
-        Event::new("converter/conver_coin_to_cw20").add_attribute("denom", String::from(token_info.name.clone()));
     Ok(Response::new()
+        .add_attribute("action", "conver_coin_to_cw20")
+        .add_attribute("sender", &info.sender)
+        .add_attribute("subdenom", String::from(token_info.name.clone()))
+        .add_attribute("amount", String::from(amount_to_burn.clone()))
         .add_message(send_msg)
         .add_message(msg_burn)
-        .add_messages(messages)
-        .add_event(init_event))
+        .add_messages(messages))
 }
